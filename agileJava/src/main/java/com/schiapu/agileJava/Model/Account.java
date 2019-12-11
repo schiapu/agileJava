@@ -1,61 +1,67 @@
 package com.schiapu.agileJava.Model;
 
 import java.util.ArrayList;
+import java.util.UUID;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
 @Component
 public class Account {
-	private Double totalValue;
-	private ArrayList<Transaction> transactionList;
-	private Boolean lock;
-	
-	public Account() {
-		this.totalValue = 0d;
-		this.transactionList = new ArrayList<Transaction>();
-		this.lock = false;
-	}
+        
+    @SuppressWarnings("unused")
+	private UUID id;
+    private Double totalValue;
+    private ArrayList<Transaction> transactionList;
+    private ReadWriteLock saveLock;
 
-	public Double getTotalValue() {
-		return totalValue;
-	}
+    public Account() {
+        this.id = UUID.randomUUID();
+        this.totalValue = 0d;
+        this.transactionList = new ArrayList<Transaction>();
+        this.saveLock = new ReentrantReadWriteLock();
+    }
 
-	public ArrayList<Transaction> getTransactionList() {
-		return transactionList;
-	}
-	
-	public HttpStatus addTransaction(Transaction transaction) {
-		if (lock) {
-			return HttpStatus.LOCKED;
-		}
-		else {
-			lock = true;
-			if (transaction.getType() == TransactionType.CREDIT) {
-				totalValue += transaction.getAmount();
-			}
-			else {
-				if (totalValue - transaction.getAmount() < 0) {
-					return HttpStatus.CONFLICT;
-				}
-				else {
-					totalValue -= transaction.getAmount();
-				}
-			}
+    public Double getTotalValue() {
+        return totalValue;
+    }
 
-			this.transactionList.add(transaction);
-			lock = false;
-			return HttpStatus.OK;
-		}
-		
-	}
+    public ArrayList<Transaction> getTransactionList() {
+        return transactionList;
+    }
 
-	public Boolean getLock() {
-		return lock;
-	}
+    public HttpStatus addTransaction(Transaction transaction) {
+        saveLock.writeLock().lock();
+        try{
+            if(validateTransactionTotalValue(transaction)){
+                this.transactionList.add(transaction);
+                return HttpStatus.OK;
+            }
+            else
+            {
+                return HttpStatus.CONFLICT;
+            }   
+        }
+        finally{
+            saveLock.writeLock().unlock();
+        }
 
-	public void setLock(Boolean lock) {
-		this.lock = lock;
-	}
+    }
 
+    private Boolean validateTransactionTotalValue(Transaction transaction){
+        if (transaction.getType() == TransactionType.CREDIT) {
+            totalValue += transaction.getAmount();
+        }
+        else {
+                if (totalValue - transaction.getAmount() < 0) {
+                        return false;
+                }
+                else {
+                        totalValue -= transaction.getAmount();
+                }
+        }
+        return true;
+    }
 }
